@@ -35,6 +35,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS price_log (
 
 let sock = null; // Global socket reference for sending messages
 let isPolling = false; // 4. Lockfile-based guard for polling
+let digestStarted = false;
+let isDigestRunning = false;
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -68,12 +70,10 @@ async function connectToWhatsApp() {
             }
         } else if (connection === 'open') {
             console.log('WhatsApp connection opened successfully!');
-            // 5. On startup, send a message to OWNER_JID
-            try {
-                await sock.sendMessage(OWNER_JID, { text: `Bot started, tracking ${ASSET_IDS.length} items.` });
-                console.log(`Sent startup message to ${OWNER_JID}`);
-            } catch (err) {
-                console.error('Error sending startup message:', err);
+            // Start daily digest loop if it hasn't started yet
+            if (!digestStarted) {
+                digestStarted = true;
+                sendDailyDigest();
             }
         }
     });
@@ -105,6 +105,47 @@ async function fetchRolimonsData(retries = 3, backoff = 1000) {
             await delay(backoff);
             backoff *= 2;
         }
+    }
+}
+
+async function sendDailyDigest() {
+    if (!sock) {
+        setTimeout(sendDailyDigest, 5000);
+        return;
+    }
+    
+    if (isDigestRunning) return;
+    isDigestRunning = true;
+
+    try {
+        const data = await fetchRolimonsData();
+        const items = data.items;
+
+        let digestMsg = "📊 Daily update";
+        let hasItems = false;
+
+        for (const assetId of ASSET_IDS) {
+            if (!items || !items[assetId]) continue;
+            
+            const itemData = items[assetId];
+            const name = itemData[0];
+            const rap = itemData[2];
+            const value = itemData[3];
+            
+            digestMsg += `\n${name} — RAP: ${rap} Robux, Value: ${value} Robux`;
+            hasItems = true;
+        }
+
+        if (hasItems) {
+            await sock.sendMessage(OWNER_JID, { text: digestMsg });
+            console.log("Daily digest sent successfully.");
+        }
+    } catch (error) {
+        console.error("Error during daily digest:", error.message);
+    } finally {
+        isDigestRunning = false;
+        // Schedule next run 24h later
+        setTimeout(sendDailyDigest, 24 * 60 * 60 * 1000);
     }
 }
 
