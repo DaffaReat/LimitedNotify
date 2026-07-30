@@ -22,8 +22,10 @@ const POLL_CRON_SCHEDULE = process.env.POLL_CRON_SCHEDULE || "*/5 * * * *";
 const ASSET_IDS_STR = process.env.ASSET_IDS || "4390890198";
 const ASSET_IDS = ASSET_IDS_STR.split(',').map(id => id.trim()).filter(id => id);
 const OWNER_JID = process.env.OWNER_JID || "628111441757@s.whatsapp.net";
+const DB_PATH = process.env.DB_PATH || "./db.sqlite";
+const AUTH_DIR = process.env.AUTH_DIR || "./auth";
 
-const db = new Database('db.sqlite');
+const db = new Database(DB_PATH);
 db.exec(`CREATE TABLE IF NOT EXISTS price_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     asset_id TEXT,
@@ -35,7 +37,7 @@ let sock = null; // Global socket reference for sending messages
 let isPolling = false; // 4. Lockfile-based guard for polling
 
 async function connectToWhatsApp() {
-    const { state, saveCreds } = await useMultiFileAuthState('./auth');
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
     sock = makeWASocket({
         auth: state,
